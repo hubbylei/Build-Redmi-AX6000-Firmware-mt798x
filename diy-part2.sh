@@ -23,14 +23,14 @@ cp -rf tmp/packages/lang/rust feeds/packages/lang/
 git clone --depth 1 --single-branch https://github.com/sbwml/packages_lang_golang -b 25.x feeds/packages/lang/golang
 
 # frp
-FRP_VER=$(curl -sL https://api.github.com/repos/fatedier/frp/releases/latest | jq -r .name | sed 's/v//g')
-curl -sL -o /tmp/frp-${FRP_VER}.tar.gz https://codeload.github.com/fatedier/frp/tar.gz/v${FRP_VER}
-FRP_PKG_SHA=$(sha256sum /tmp/frp-${FRP_VER}.tar.gz | awk '{print $1}')
-rm -rf /tmp/frp-${FRP_VER}.tar.gz
+# FRP_VER=$(curl -sL https://api.github.com/repos/fatedier/frp/releases/latest | jq -r .name | sed 's/v//g')
+# curl -sL -o /tmp/frp-${FRP_VER}.tar.gz https://codeload.github.com/fatedier/frp/tar.gz/v${FRP_VER}
+# FRP_PKG_SHA=$(sha256sum /tmp/frp-${FRP_VER}.tar.gz | awk '{print $1}')
+# rm -rf /tmp/frp-${FRP_VER}.tar.gz
 
-sed -i 's/PKG_VERSION:=.*/PKG_VERSION:='${FRP_VER}'/g' feeds/packages/net/frp/Makefile
-sed -i 's/PKG_HASH:=.*/PKG_HASH:='${FRP_PKG_SHA}'/g' feeds/packages/net/frp/Makefile
-sed -i 's/\$(2)_full.ini/legacy\/\$(2)_legacy_full.ini/g' feeds/packages/net/frp/Makefile
+# sed -i 's/PKG_VERSION:=.*/PKG_VERSION:='${FRP_VER}'/g' feeds/packages/net/frp/Makefile
+# sed -i 's/PKG_HASH:=.*/PKG_HASH:='${FRP_PKG_SHA}'/g' feeds/packages/net/frp/Makefile
+# sed -i 's/\$(2)_full.ini/legacy\/\$(2)_legacy_full.ini/g' feeds/packages/net/frp/Makefile
 
 # iptables
 IMS=$(grep "iptables-mod-socket" package/network/utils/iptables/Makefile)
