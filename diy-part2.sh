@@ -22,7 +22,7 @@ cp -rf tmp/packages/lang/rust feeds/packages/lang/
 # golang
 git clone --depth 1 --single-branch https://github.com/sbwml/packages_lang_golang -b 25.x feeds/packages/lang/golang
 
-frp
+# frp
 FRP_VER="0.66.0"
 curl -sL -o /tmp/frp-${FRP_VER}.tar.gz https://codeload.github.com/fatedier/frp/tar.gz/v${FRP_VER}
 FRP_PKG_SHA=$(sha256sum /tmp/frp-${FRP_VER}.tar.gz | awk '{print $1}')
