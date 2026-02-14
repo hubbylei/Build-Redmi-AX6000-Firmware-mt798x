@@ -20,7 +20,7 @@ done
 cp -rf tmp/packages/lang/rust feeds/packages/lang/
 
 # golang
-git clone --depth 1 --single-branch https://github.com/sbwml/packages_lang_golang -b 25.x feeds/packages/lang/golang
+git clone --depth 1 --single-branch https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
 
 # frp
 FRP_VER="0.66.0"
