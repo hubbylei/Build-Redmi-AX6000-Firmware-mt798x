@@ -18,7 +18,7 @@ on:
         required: false
         default: 'false'
   schedule:
-    - cron: 0 16 1 * *
+    - cron: 0 17 * * 0
 
 env:
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
@@ -166,4 +166,5 @@ jobs:
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
