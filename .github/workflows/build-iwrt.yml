@@ -26,9 +26,6 @@ env:
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ax6000.config
   DIY_SH: diy.sh
-  UPLOAD_BIN_DIR: true
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
@@ -87,8 +84,8 @@ jobs:
         cd ${GITHUB_WORKSPACE}/iwrt
         make -j$(nproc) || make -j1 V=s
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=$(date +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
         echo "status=success" >> "$GITHUB_OUTPUT"
 
     - name: Check space usage
@@ -99,15 +96,15 @@ jobs:
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd ${GITHUB_WORKSPACE}/iwrt/bin
-        zip -r ${GITHUB_WORKSPACE}/iwrt/iwrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}.zip *
+        zip -r ${GITHUB_WORKSPACE}/iwrt/${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}_bin.zip *
 
     - name: Organize files
       id: organize
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd ${GITHUB_WORKSPACE}/iwrt/bin/targets/*/*
         rm -rf packages
-        mv ${GITHUB_WORKSPACE}/iwrt/iwrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}.zip ./
+        mv ${GITHUB_WORKSPACE}/iwrt/${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}_bin.zip ./
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> "$GITHUB_OUTPUT"
 
@@ -115,12 +112,12 @@ jobs:
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
-        name: iwrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: ${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
     - name: Generate release tag
       id: tag
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         ls ${{ env.FIRMWARE }}
         echo "release_tag=$(date +"%Y.%m.%d-%H%M%S")" >> "$GITHUB_OUTPUT"
