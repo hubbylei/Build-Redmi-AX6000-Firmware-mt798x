@@ -1,26 +1,37 @@
 #!/bin/bash
 
-del_data="
-feeds/packages/lang/golang
-feeds/packages/lang/rust
-target/linux/mediatek/patches-5.4/0504-macsec-revert-async-support.patch
-target/linux/mediatek/patches-5.4/0005-dts-mt7622-add-gsw.patch
-target/linux/mediatek/patches-5.4/0993-arm64-dts-mediatek-Split-PCIe-node-for-MT2712-MT7622.patch
-target/linux/mediatek/patches-5.4/1024-pcie-add-multi-MSI-support.patch
-"
+rm -rf feeds/packages/lang/golang
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/pymumu/openwrt-smartdns -b master package/custom/smartdns
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/pymumu/luci-app-smartdns -b master package/custom/luci-app-smartdns
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/Openwrt-Passwall/openwrt-passwall -b main package/custom/openwrt-passwall
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/Openwrt-Passwall/openwrt-passwall-packages -b main package/custom/passwall-packages
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/tty228/luci-app-wechatpush -b openwrt-18.06 package/custom/luci-app-serverchan
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/hubbylei/openwrt-cdnspeedtest -b master package/custom/openwrt-cdnspeedtest
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/hubbylei/luci-app-cloudflarespeedtest -b main package/custom/luci-app-cloudflarespeedtest
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/hubbylei/luci-theme-bootstrap-mod -b main package/custom/luci-theme-bootstrap-mod
+git clone --filter=blob:none --depth 1 --single-branch https://github.com/immortalwrt/packages -b openwrt-24.10 tmp/packages
 
-for data in ${del_data};
+cp -rf package/custom/openwrt-passwall/luci-app-passwall package/custom/
+rm -rf package/custom/passwall-packages/.git*
+cp -rf package/custom/passwall-packages/* package/custom/
+cp -rf package/custom/openwrt-cdnspeedtest/cdnspeedtest package/custom/
+cp -rf tmp/packages/lang/rust feeds/packages/lang/
+rm -rf package/custom/openwrt-passwall
+rm -rf package/custom/passwall-packages
+rm -rf package/custom/openwrt-cdnspeedtest
+rm -rf tmp/packages
+
+del_data=$(ls package/custom)
+for data in ${del_data}
 do
-    if [[ -d ${data} || -f ${data} ]];then
-        rm -rf ${data}
-        echo "Deleted ${data}"
+    isdel=$(find feeds -iname "${data}")
+    if [[ -n ${isdel} && -d ${isdel} ]];then
+        rm -rf ${isdel}
+        echo "Deleted ${isdel}"
     fi
 done
 
-cp -rf tmp/packages/lang/rust feeds/packages/lang/
-
-# golang
-git clone --depth 1 --single-branch https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
 
 # frp
 FRP_VER="0.66.0"
@@ -75,17 +86,17 @@ GEOIP_HASH=$(echo -n `curl -sL https://github.com/Loyalsoldier/v2ray-rules-dat/r
 GEOSITE_VER=$GEOIP_VER
 GEOSITE_HASH=$(echo -n `curl -sL https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/$GEOSITE_VER/geosite.dat.sha256sum | awk '{print $1}'`)
 
-sed -i '/HASH:=/d' package/custom/passwall-packages/v2ray-geodata/Makefile
-sed -i 's/Loyalsoldier\/geoip/Loyalsoldier\/v2ray-rules-dat/g' package/custom/passwall-packages/v2ray-geodata/Makefile
-sed -i 's/GEOIP_VER:=.*/GEOIP_VER:='"$GEOIP_VER"'/g' package/custom/passwall-packages/v2ray-geodata/Makefile
-sed -i '/FILE:=$(GEOIP_FILE)/a\ HASH:='"$GEOIP_HASH"'' package/custom/passwall-packages/v2ray-geodata/Makefile
-sed -i 's/GEOSITE_VER:=.*/GEOSITE_VER:='"$GEOSITE_VER"'/g' package/custom/passwall-packages/v2ray-geodata/Makefile
-sed -i '/FILE:=$(GEOSITE_FILE)/a\ HASH:='"$GEOSITE_HASH"'' package/custom/passwall-packages/v2ray-geodata/Makefile
+sed -i '/HASH:=/d' package/custom/v2ray-geodata/Makefile
+sed -i 's/Loyalsoldier\/geoip/Loyalsoldier\/v2ray-rules-dat/g' package/custom/v2ray-geodata/Makefile
+sed -i 's/GEOIP_VER:=.*/GEOIP_VER:='"$GEOIP_VER"'/g' package/custom/v2ray-geodata/Makefile
+sed -i '/FILE:=$(GEOIP_FILE)/a\ HASH:='"$GEOIP_HASH"'' package/custom/v2ray-geodata/Makefile
+sed -i 's/GEOSITE_VER:=.*/GEOSITE_VER:='"$GEOSITE_VER"'/g' package/custom/v2ray-geodata/Makefile
+sed -i '/FILE:=$(GEOSITE_FILE)/a\ HASH:='"$GEOSITE_HASH"'' package/custom/v2ray-geodata/Makefile
 
-sed -i 's/URL:=https:\/\/www.v2fly.org/URL:=https:\/\/github.com\/Loyalsoldier\/v2ray-rules-dat/g' package/custom/passwall-packages/v2ray-geodata/Makefile
+sed -i 's/URL:=https:\/\/www.v2fly.org/URL:=https:\/\/github.com\/Loyalsoldier\/v2ray-rules-dat/g' package/custom/v2ray-geodata/Makefile
 
 # smartdns
-SMARTDNS_JSON=$(curl -sL -H "${headers}" https://api.github.com/repos/pymumu/smartdns/commits)
+SMARTDNS_JSON=$(curl -sL https://api.github.com/repos/pymumu/smartdns/commits)
 SMARTDNS_VER=$(echo ${SMARTDNS_JSON} | jq -r .[0].commit.committer.date | awk -F "T" '{print $1}')
 SMARTDNS_SHA=$(echo ${SMARTDNS_JSON} | jq -r .[0].sha)
 

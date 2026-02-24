@@ -25,8 +25,7 @@ env:
   REPO_BRANCH: openwrt-21.02
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ax6000.config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
+  DIY_SH: diy.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
@@ -56,30 +55,24 @@ jobs:
       run: |
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install $(cat ${GITHUB_WORKSPACE}/depends-ubuntu)
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown $USER:$GROUPS /workdir
 
     - name: Clone source code
       run: |
         df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH /workdir/iwrt
-        ln -snf /workdir/iwrt ${GITHUB_WORKSPACE}/iwrt
+        git clone $REPO_URL -b $REPO_BRANCH ${GITHUB_WORKSPACE}/iwrt
 
     - name: Load custom feeds
       run: |
-        [ -e $FEEDS_CONF ] && cp $FEEDS_CONF ${GITHUB_WORKSPACE}/iwrt/feeds.conf.default
-        cp ${GITHUB_WORKSPACE}/$DIY_P1_SH ${GITHUB_WORKSPACE}/$DIY_P2_SH ${GITHUB_WORKSPACE}/iwrt/
+        [ -e $FEEDS_CONF ] && cp -vf $FEEDS_CONF ${GITHUB_WORKSPACE}/iwrt/feeds.conf.default
+        cp -vf ${GITHUB_WORKSPACE}/$DIY_SH ${GITHUB_WORKSPACE}/iwrt/
         cd ${GITHUB_WORKSPACE}/iwrt
-        chmod a+x $DIY_P1_SH $DIY_P2_SH
+        chmod a+x $DIY_SH
         ./scripts/feeds update -a
-        ./$DIY_P1_SH
-        ./$DIY_P2_SH
+        ./$DIY_SH
         ./scripts/feeds update -i
         ./scripts/feeds install -a
-        cp -f ${GITHUB_WORKSPACE}/$CONFIG_FILE ${GITHUB_WORKSPACE}/iwrt/.config
+        cp -vf ${GITHUB_WORKSPACE}/$CONFIG_FILE ${GITHUB_WORKSPACE}/iwrt/.config
         make defconfig
 
     - name: Download package
@@ -162,7 +155,7 @@ jobs:
       uses: dev-drprasad/delete-older-releases@master
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        keep_latest: 12
+        keep_latest: 48
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
