@@ -66,20 +66,6 @@ fi
 sed -i '/sed -r -i/a\\tsed -i "s,#Port 22,Port 22,g" $(1)\/etc\/ssh\/sshd_config\n\tsed -i "s,#ListenAddress 0.0.0.0,ListenAddress 0.0.0.0,g" $(1)\/etc\/ssh\/sshd_config\n\tsed -i "s,#PermitRootLogin prohibit-password,PermitRootLogin yes,g" $(1)\/etc\/ssh\/sshd_config' feeds/packages/net/openssh/Makefile
 
 # vlmcsd
-VLMCSD_JSON=$(curl -sL https://api.github.com/repos/Wind4/vlmcsd/commits)
-VLMCSD_SHA=$(echo ${VLMCSD_JSON} | jq -r .[0].sha)
-
-curl -sL -o /tmp/vlmcsd-${VLMCSD_SHA}.tar.gz https://codeload.github.com/Wind4/vlmcsd/tar.gz/${VLMCSD_SHA}
-VLMCSD_PKG_SHA=$(sha256sum /tmp/vlmcsd-${VLMCSD_SHA}.tar.gz | awk '{print $1}')
-rm -rf /tmp/vlmcsd-${VLMCSD_SHA}.tar.gz
-
-sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:='${VLMCSD_SHA}'/g' feeds/packages/net/vlmcsd/Makefile
-sed -i 's/PKG_SOURCE_PROTO:=.*/PKG_SOURCE:=$(PKG_NAME)-$(PKG_RELEASE).tar.gz/g' feeds/packages/net/vlmcsd/Makefile
-sed -i 's/PKG_SOURCE_URL:=.*/PKG_SOURCE_URL:=https:\/\/codeload.github.com\/Wind4\/vlmcsd\/tar.gz\/$(PKG_RELEASE)?/g' feeds/packages/net/vlmcsd/Makefile
-sed -i 's/PKG_SOURCE_VERSION:=.*/PKG_HASH:='${VLMCSD_PKG_SHA}'/g' feeds/packages/net/vlmcsd/Makefile
-sed -i '/PKG_HASH:=.*/a\PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_RELEASE)' feeds/packages/net/vlmcsd/Makefile
-sed -i '/PKG_MIRROR_HASH:=.*/d' feeds/packages/net/vlmcsd/Makefile
-sed -i '/PKG_SOURCE_DATE:=.*/d' feeds/packages/net/vlmcsd/Makefile
 sed -i 's/;Listen = 0.0.0.0:1688/Listen = 0.0.0.0:1688/g' feeds/packages/net/vlmcsd/files/vlmcsd.ini
 sed -i 's/ -L \[::\]:1688//g' feeds/luci/applications/luci-app-vlmcsd/root/etc/init.d/kms
 echo -e "\n#Windows 10/ Windows 11 KMS 安装激活密钥\n#Windows 10/11 Pro：W269N-WFGWX-YVC9B-4J6C9-T83GX\n#Windows 10/11 Enterprise：NPPR9-FWDCX-D2C8J-H872K-2YT43\n#Windows 10/11 Pro for Workstations：NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J\n" >> feeds/packages/net/vlmcsd/files/vlmcsd.ini
