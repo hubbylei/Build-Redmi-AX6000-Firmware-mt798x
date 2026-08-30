@@ -1,17 +1,27 @@
-name: Build Firmware
+name: Build Redmi AX6000 110M Firmware
+
 on:
   workflow_dispatch:
     inputs:
-      ssh:
-        description: 'SSH connection to Actions'
+      publish_release:
+        description: Publish the selected firmware files as a GitHub Release
         required: false
-        default: 'false'
+        type: boolean
+        default: false
   schedule:
-    - cron: 0 17 * * 0
+    - cron: "0 17 * * 0"
+
+concurrency:
+  group: ax6000-110m-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 env:
-  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
+  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
   REPO_BRANCH: openwrt-21.02
+  SOURCE_COMMIT: ba554197ed7e252fd3c1ee023621e1d1d009d323
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ax6000.config
   DIY_SH: diy.sh
@@ -19,131 +29,105 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@main
+      - name: Checkout build configuration
+        uses: actions/checkout@v4
 
-    - name: SSH connection to Actions
-      uses: P3TERX/ssh2actions@main
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install $(cat "$GITHUB_WORKSPACE/depends-ubuntu")
+          sudo timedatectl set-timezone "$TZ"
 
-    - name: Clean-up
-      uses: rokibhasansagar/slimhub_actions@main
+      - name: Checkout pinned ImmortalWrt source
+        run: |
+          git clone --filter=blob:none --single-branch --branch "$REPO_BRANCH" \
+            "$REPO_URL" "$GITHUB_WORKSPACE/iwrt"
+          git -C "$GITHUB_WORKSPACE/iwrt" checkout --detach "$SOURCE_COMMIT"
+          test "$(git -C "$GITHUB_WORKSPACE/iwrt" rev-parse HEAD)" = "$SOURCE_COMMIT"
+          git -C "$GITHUB_WORKSPACE/iwrt" merge-base --is-ancestor \
+            "$SOURCE_COMMIT" "origin/$REPO_BRANCH"
 
-    - name: Initialization environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(cat ${GITHUB_WORKSPACE}/depends-ubuntu)
-        sudo timedatectl set-timezone "$TZ"
+      - name: Prepare feeds and configuration
+        working-directory: iwrt
+        run: |
+          cp "$GITHUB_WORKSPACE/$FEEDS_CONF" feeds.conf.default
+          ./scripts/feeds update -a
+          bash "$GITHUB_WORKSPACE/$DIY_SH"
+          ./scripts/feeds install -a
+          cp "$GITHUB_WORKSPACE/$CONFIG_FILE" .config
+          make defconfig
+          test "$(grep -c '^CONFIG_TARGET_mediatek_mt7986_DEVICE_.*=y$' .config)" -eq 1
+          grep -qx 'CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000=y' .config
+          grep -qx '# CONFIG_TARGET_mediatek_mt7986_DEVICE_xiaomi_redmi-router-ax6000-stock is not set' .config
+          grep -q '^CONFIG_PACKAGE_kmod-mediatek_hnat=y$' .config
+          grep -q '^CONFIG_PACKAGE_kmod-warp=y$' .config
+          grep -q '^CONFIG_PACKAGE_kmod-mt_wifi=y$' .config
+          if grep -Eq '^CONFIG_PACKAGE_(luci-app-passwall|xray-core|v2ray-geoip|v2ray-geosite|hysteria|haproxy|luci-app-frpc|luci-app-frps|frpc|frps|luci-app-ddns-go|ddns-go|luci-app-serverchan|luci-app-smartdns|smartdns|luci-app-vlmcsd|vlmcsd|luci-app-ttyd|ttyd)=y$' .config; then
+            echo "A forbidden optional service was selected" >&2
+            exit 1
+          fi
 
-    - name: Clone source code
-      run: |
-        df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH ${GITHUB_WORKSPACE}/iwrt
+      - name: Download sources
+        working-directory: iwrt
+        run: make download -j"$(nproc)"
 
-    - name: Load custom feeds
-      run: |
-        [ -e $FEEDS_CONF ] && cp -vf $FEEDS_CONF ${GITHUB_WORKSPACE}/iwrt/feeds.conf.default
-        cp -vf ${GITHUB_WORKSPACE}/$DIY_SH ${GITHUB_WORKSPACE}/iwrt/
-        cd ${GITHUB_WORKSPACE}/iwrt
-        chmod a+x $DIY_SH
-        ./scripts/feeds update -a
-        ./$DIY_SH
-        ./scripts/feeds update -i
-        ./scripts/feeds install -a
-        cp -vf ${GITHUB_WORKSPACE}/$CONFIG_FILE ${GITHUB_WORKSPACE}/iwrt/.config
-        make defconfig
+      - name: Build firmware
+        working-directory: iwrt
+        run: make -j"$(nproc)" || make -j1 V=s
 
-    - name: Download package
-      id: package
-      run: |
-        cd ${GITHUB_WORKSPACE}/iwrt
-        make download -j$(nproc)
+      - name: Collect firmware files
+        id: firmware
+        working-directory: iwrt
+        run: |
+          target_dir="$PWD/bin/targets/mediatek/mt7986"
+          output_dir="$GITHUB_WORKSPACE/firmware"
+          test -d "$target_dir"
+          mkdir -p "$output_dir"
 
-    - name: Compile the firmware
-      id: compile
-      run: |
-        cd ${GITHUB_WORKSPACE}/iwrt
-        make -j$(nproc) || make -j1 V=s
-        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "FILE_DATE=$(date +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
-        echo "status=success" >> "$GITHUB_OUTPUT"
+          find "$target_dir" -maxdepth 1 -type f \
+            \( -name '*xiaomi_redmi-router-ax6000*sysupgrade*.bin' \
+            -o -name '*xiaomi_redmi-router-ax6000*factory*.bin' \
+            -o -name 'config.buildinfo' \
+            -o -name '*.manifest' \) \
+            ! -name '*stock*' \
+            -exec cp '{}' "$output_dir/" \;
 
-    - name: Check space usage
-      if: (!cancelled())
-      run: df -hT
+          compgen -G "$output_dir/*xiaomi_redmi-router-ax6000*sysupgrade*.bin" >/dev/null
+          if test -f "$target_dir/sha256sums"; then
+            while read -r checksum filename; do
+              filename="${filename#\*}"
+              if test -f "$output_dir/$filename"; then
+                printf '%s  %s\n' "$checksum" "$filename"
+              fi
+            done < "$target_dir/sha256sums" > "$output_dir/sha256sums"
+            test -s "$output_dir/sha256sums"
+          fi
+          short_source="${SOURCE_COMMIT:0:12}"
+          echo "artifact_name=redmi-ax6000-immortalwrt-110m-$short_source" >> "$GITHUB_OUTPUT"
+          echo "release_tag=ax6000-110m-$short_source-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          ls -lh "$output_dir"
 
-    - name: Zip bin directory
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        cd ${GITHUB_WORKSPACE}/iwrt/bin
-        zip -r ${GITHUB_WORKSPACE}/iwrt/${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}_bin.zip *
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.firmware.outputs.artifact_name }}
+          path: firmware/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
-    - name: Organize files
-      id: organize
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        cd ${GITHUB_WORKSPACE}/iwrt/bin/targets/*/*
-        rm -rf packages
-        mv ${GITHUB_WORKSPACE}/iwrt/${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}_bin.zip ./
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        echo "status=success" >> "$GITHUB_OUTPUT"
-
-    - name: Upload firmware directory
-      uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && !cancelled()
-      with:
-        name: ${{ env.DEVICE_NAME }}_${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE }}
-
-    - name: Generate release tag
-      id: tag
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        ls ${{ env.FIRMWARE }}
-        echo "release_tag=$(date +"%Y.%m.%d-%H%M%S")" >> "$GITHUB_OUTPUT"
-        echo "status=success" >> "$GITHUB_OUTPUT"
-
-    - name: Generate release info
-      id: info
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      run: |
-        echo "## :mega:Update content" > release.txt
-        echo "![](https://img.shields.io/github/downloads/${{ github.repository }}/${{ steps.tag.outputs.release_tag }}/total?style=flat-square)" >> release.txt
-        echo "### Info" >> release.txt
-        echo "**:minidisc: Build Time: ${{ steps.tag.outputs.release_tag }}**" >> release.txt
-        touch release.txt
-        echo "status=success" >> $GITHUB_OUTPUT
-
-    - name: Upload firmware to release
-      uses: ncipollo/release-action@main
-      if: steps.info.outputs.status == 'success' && !cancelled()
-      with:
-        tag: ${{ steps.tag.outputs.release_tag }}
-        bodyFile: release.txt
-        artifacts: ${{ env.FIRMWARE }}/*
-
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@main
-      with:
-        retain_days: 0
-        keep_minimum_runs: 1
-
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@master
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-      with:
-        keep_latest: 48
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
+      - name: Publish GitHub Release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.firmware.outputs.release_tag }}" firmware/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Redmi AX6000 ImmortalWrt 110M ${{ steps.firmware.outputs.release_tag }}" \
+            --notes "hanwckf immortalwrt-mt798x openwrt-21.02, non-stock 110 MiB single-UBI layout. Source: $SOURCE_COMMIT"
